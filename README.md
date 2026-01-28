@@ -15,13 +15,6 @@ Built with Google's FLAN-T5 AI model that downloads straight to your computer!. 
 
 Keeps responses formal and educational, so it's actually useful for homework instead of just messing around.
 
-How to run it yourself!
-
-```bash
-pip install -r requirements.txt
-streamlit run app.py
-```
-
 ⚠️ Remember:The First run takes 2-3 minutes while the AI model downloads. After that it's cached and loads almost instantly!
 
 Created during the 8-Day AI Challenge - trying to make AI that's actually safe and useful for students without being annoying about it.
