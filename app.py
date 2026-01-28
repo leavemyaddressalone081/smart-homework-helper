@@ -66,24 +66,22 @@ INAPPROPRIATE_WORDS = [
 
 def contains_inappropriate_content(text):
     """Check if text contains inappropriate words (including alternative spellings)"""
-    # Remove special characters and convert to lowercase
     cleaned_text = re.sub(r'[^a-z0-9\s]', '', text.lower())
-    
-    # Check for inappropriate words
     for word in INAPPROPRIATE_WORDS:
-        # Create pattern that matches word with any characters between letters
         pattern = ''.join(f'{char}[^a-z0-9]*' for char in word)
         if re.search(pattern, cleaned_text):
             return True
-    
     return False
 
 # Load model and tokenizer (cached so it only loads once)
 @st.cache_resource
 def load_model():
-    """Load the FLAN-T5 model and tokenizer"""
-    tokenizer = AutoTokenizer.from_pretrained("google/flan-t5-base")
-    model = AutoModelForSeq2SeqLM.from_pretrained("google/flan-t5-base")
+    tokenizer = AutoTokenizer.from_pretrained("google/flan-t5-small")
+    model = AutoModelForSeq2SeqLM.from_pretrained(
+        "google/flan-t5-small",
+        torch_dtype=torch.float32
+    )
+    model = model.to("cpu")
     return tokenizer, model
 
 # Load model
@@ -93,26 +91,17 @@ with st.spinner("Loading AI model... (this may take a moment on first run)"):
 def get_homework_help(question):
     """Generate homework help using the model"""
     try:
-        # Format prompt for educational response
         prompt = f"Explain step-by-step in a clear and formal way: {question}"
-        
-        # Tokenize input
         inputs = tokenizer(prompt, return_tensors="pt", max_length=512, truncation=True)
-        
-        # Generate response
         outputs = model.generate(
             inputs.input_ids,
             max_length=200,
             num_beams=4,
-            early_stopping=True,
-            temperature=0.7
+            early_stopping=True
         )
-        
-        # Decode response
         response = tokenizer.decode(outputs[0], skip_special_tokens=True)
         return response
-        
-    except Exception as e:
+    except Exception:
         return "I'm having trouble processing this question. Please try rephrasing it."
 
 # Initialize chat history
@@ -124,15 +113,11 @@ user_input = st.text_input("💭 Ask your homework question:")
 
 # Process input
 if user_input:
-    # Check for inappropriate content
     if contains_inappropriate_content(user_input):
         response = "Sorry, I can only help with appropriate content. Is there anything else you would like to ask me?"
     else:
-        # Get AI response
         with st.spinner("Thinking..."):
             response = get_homework_help(user_input)
-    
-    # Add to history
     st.session_state.history.append({
         "question": user_input,
         "answer": response
@@ -142,7 +127,6 @@ if user_input:
 if st.session_state.history:
     st.markdown("---")
     st.subheader("📝 Your Study Session")
-    
     for i, chat in enumerate(st.session_state.history):
         st.markdown(f"**❓ Question {i+1}:** {chat['question']}")
         st.markdown(f"**✅ Answer:** {chat['answer']}")
@@ -172,12 +156,3 @@ with st.sidebar:
 # Footer
 st.markdown("---")
 st.markdown("🚀 Safe AI Homework Helper | Built for Students")
-```
-
----
-
-## **UPDATED FILE 2: `requirements.txt`**
-```
-streamlit
-transformers
-torch
