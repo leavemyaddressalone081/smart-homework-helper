@@ -1,7 +1,7 @@
 import streamlit as st
-from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
 import re
-import torch
+import requests
+import os
 
 # Page config
 st.set_page_config(page_title="📚 Safe Homework Helper", layout="centered")
@@ -64,48 +64,39 @@ INAPPROPRIATE_WORDS = [
     "a$$", "b!tch", "sh!t", "fvck", "phuck", "azz",
 ]
 
+
 def contains_inappropriate_content(text):
-    """Check if text contains inappropriate words (including alternative spellings)"""
     cleaned_text = re.sub(r'[^a-z0-9\s]', '', text.lower())
-    for word in INAPPROPRIATE_WORDS:
-        pattern = ''.join(f'{char}[^a-z0-9]*' for char in word)
-        if re.search(pattern, cleaned_text):
-            return True
-    return False
+    return any(word in cleaned_text for word in INAPPROPRIATE_WORDS)
 
-# Load model and tokenizer (cached so it only loads once)
-@st.cache_resource
-def load_model():
-    tokenizer = AutoTokenizer.from_pretrained("google/flan-t5-small")
-    model = AutoModelForSeq2SeqLM.from_pretrained(
-        "google/flan-t5-small",
-        torch_dtype=torch.float32
-    )
-    model = model.to("cpu")
-    return tokenizer, model
-
-# Load model
-with st.spinner("Loading AI model... (this may take a moment on first run)"):
-    tokenizer, model = load_model()
+# Hugging Face Router API
+API_URL = "https://router.huggingface.co/v1/chat/completions"
+HEADERS = {
+    "Authorization": f"Bearer {st.secrets['HF_TOKEN']}",
+    "Content-Type": "application/json"
+}
 
 def get_homework_help(question):
-    """Generate homework help using the model"""
     try:
-        prompt = f"Explain step-by-step in a clear and formal way: {question}"
-        inputs = tokenizer(prompt, return_tensors="pt", max_length=512, truncation=True)
-        outputs = model.generate(
-            inputs.input_ids,
-            max_length=200,
-            num_beams=4,
-            early_stopping=True
-        )
-        response = tokenizer.decode(outputs[0], skip_special_tokens=True)
-        return response
+        payload = {
+            "model": "mistralai/Mistral-7B-Instruct-v0.2",
+            "messages": [
+                {
+                    "role": "user",
+                    "content": f"Explain step-by-step in a clear and formal way: {question}"
+                }
+            ],
+            "temperature": 0.3,
+            "max_tokens": 400
+        }
+        response = requests.post(API_URL, headers=HEADERS, json=payload, timeout=30)
+        response.raise_for_status()
+        return response.json()["choices"][0]["message"]["content"]
     except Exception:
         return "I'm having trouble processing this question. Please try rephrasing it."
 
 # Initialize chat history
-if 'history' not in st.session_state:
+if "history" not in st.session_state:
     st.session_state.history = []
 
 # User input
@@ -118,6 +109,7 @@ if user_input:
     else:
         with st.spinner("Thinking..."):
             response = get_homework_help(user_input)
+
     st.session_state.history.append({
         "question": user_input,
         "answer": response
@@ -142,13 +134,13 @@ with st.sidebar:
     st.markdown("• 🌍 History")
     st.markdown("• 💻 Computer Science")
     st.markdown("• And more!")
-    
+
     st.markdown("---")
     st.write("**Rules:**")
     st.caption("✓ Formal & clear explanations")
     st.caption("✓ Step-by-step answers")
     st.caption("✓ Appropriate content only")
-    
+
     if st.button("🗑️ Clear Chat"):
         st.session_state.history = []
         st.rerun()
