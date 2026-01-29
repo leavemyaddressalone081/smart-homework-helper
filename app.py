@@ -1,8 +1,17 @@
 import streamlit as st
-import re
 import requests
+import re
 import os
+import time
 
+def type_text(text, speed=0.02):
+    placeholder = st.empty()
+    typed = ""
+    for char in text:
+        typed += char
+        placeholder.markdown(f"**✅ Answer:** {typed}")
+        time.sleep(speed)
+        
 # Page config
 st.set_page_config(page_title="📚 Safe Homework Helper", layout="centered")
 
@@ -64,12 +73,11 @@ INAPPROPRIATE_WORDS = [
     "a$$", "b!tch", "sh!t", "fvck", "phuck", "azz",
 ]
 
-
 def contains_inappropriate_content(text):
-    cleaned_text = re.sub(r'[^a-z0-9\s]', '', text.lower())
-    return any(word in cleaned_text for word in INAPPROPRIATE_WORDS)
+    cleaned = re.sub(r'[^a-z0-9\s]', '', text.lower())
+    return any(word in cleaned for word in INAPPROPRIATE_WORDS)
 
-# Hugging Face Router API
+# Hugging Face API
 API_URL = "https://router.huggingface.co/v1/chat/completions"
 HEADERS = {
     "Authorization": f"Bearer {st.secrets['HF_TOKEN']}",
@@ -77,74 +85,63 @@ HEADERS = {
 }
 
 def get_homework_help(question):
-    try:
-        payload = {
-            "model": "mistralai/Mistral-7B-Instruct-v0.2",
-            "messages": [
-                {
-                    "role": "user",
-                    "content": f"Explain step-by-step in a clear and formal way: {question}"
-                }
-            ],
-            "temperature": 0.3,
-            "max_tokens": 400
-        }
-        response = requests.post(API_URL, headers=HEADERS, json=payload, timeout=30)
-        response.raise_for_status()
-        return response.json()["choices"][0]["message"]["content"]
-    except Exception:
-        return "I'm having trouble processing this question. Please try rephrasing it."
+    payload = {
+        "model": "mistralai/Mistral-7B-Instruct-v0.2",
+        "messages": [
+            {"role": "system", "content": "You are a smart homework tutor. Explain clearly and step by step."},
+            {"role": "user", "content": question}
+        ],
+        "temperature": 0.2,
+        "max_tokens": 300
+    }
 
-# Initialize chat history
+    response = requests.post(API_URL, headers=HEADERS, json=payload, timeout=60)
+    data = response.json()
+
+    return data["choices"][0]["message"]["content"]
+
+# Session history
 if "history" not in st.session_state:
     st.session_state.history = []
 
 # User input
 user_input = st.text_input("💭 Ask your homework question:")
 
-# Process input
 if user_input:
     if contains_inappropriate_content(user_input):
-        response = "Sorry, I can only help with appropriate content. Is there anything else you would like to ask me?"
+        answer = "Sorry, I can only help with appropriate content. Is there anything else you would like to ask me?"
     else:
         with st.spinner("Thinking..."):
-            response = get_homework_help(user_input)
+            try:
+                answer = get_homework_help(user_input)
+            except Exception:
+                answer = "Something went wrong. Please try again."
 
     st.session_state.history.append({
         "question": user_input,
-        "answer": response
+        "answer": answer
     })
 
-# Display chat history
+# Display chat
 if st.session_state.history:
     st.markdown("---")
     st.subheader("📝 Your Study Session")
     for i, chat in enumerate(st.session_state.history):
         st.markdown(f"**❓ Question {i+1}:** {chat['question']}")
-        st.markdown(f"**✅ Answer:** {chat['answer']}")
-        st.markdown("")
+        type_text(chat["answer"])
 
 # Sidebar
 with st.sidebar:
     st.header("📖 Subject Help")
-    st.write("I can help with:")
     st.markdown("• 🔢 Math")
     st.markdown("• 🔬 Science")
     st.markdown("• 📚 English")
     st.markdown("• 🌍 History")
     st.markdown("• 💻 Computer Science")
-    st.markdown("• And more!")
-
-    st.markdown("---")
-    st.write("**Rules:**")
-    st.caption("✓ Formal & clear explanations")
-    st.caption("✓ Step-by-step answers")
-    st.caption("✓ Appropriate content only")
 
     if st.button("🗑️ Clear Chat"):
         st.session_state.history = []
         st.rerun()
 
-# Footer
 st.markdown("---")
 st.markdown("🚀 Safe AI Homework Helper | Built for Students")
